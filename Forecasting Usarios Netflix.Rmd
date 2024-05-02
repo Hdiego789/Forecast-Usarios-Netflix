@@ -1,0 +1,100 @@
+---
+title: "Forecasting Usarios Netflix"
+output: html_notebook
+---
+
+
+## Forecasting
+
+Dado a que Netflix dejará que compartir públicamente el número de suscriptores pagados, este proyecto busca pronosticar el número de suscriptores pagados al cierre del segundo, tercer y cuarto trimestre del 2024. De esta forma, se tendrá una expectativa del rendimiento de la empresa.
+
+```{r librerías}
+# cargamos todos las librerias necesarias
+library(tidyverse)
+library(readxl)
+library(forecast)
+library(tseries)
+library(ggplot2)
+library(NonlinearTSA)
+```
+
+```{r Datos}
+# importamos la base de datos
+Netflix_User_DB <- read_excel("C:/Users/hdieg/Desktop/Netflix User DB.xlsx")
+str(Netflix_User_DB)
+summary(Netflix_User_DB)
+
+```
+
+```{r Serie de tiempo}
+# Convertimos los datos en una serie de tiempo para crear un modelo
+
+#se separa la columna donde se registran el número de usuarios
+datos <- Netflix_User_DB$`Paid Users`
+
+#Se crea un objeto ts a partir de "datos" y se crea una lista de fechas
+serie_tiempo <- ts(datos, start = c(2013,1), frequency = 4)
+
+plot(serie_tiempo, xlab="Tiempo", ylab="Millones de Usarios", main = "Número de Usarios Globales Trimestrales Netflix")
+
+
+```
+
+```{r Ajuste del Modelo}
+# Creamos un modelo Sarima para pronosticar el número de usarios para el resto de trimestre del 2024
+
+
+#Realizamos pruebas de raíz unitaria para determinar como seguir con el modelo
+
+Acf(serie_tiempo)
+pacf(serie_tiempo)
+
+Resultados_prueba <- adf.test(serie_tiempo)
+print(Resultados_prueba)
+
+Kpss <- kpss.test(serie_tiempo)
+print(Kpss)
+
+kapetanios <- KSS_Unit_Root(serie_tiempo, case = 1,lags = 4,lsm = 1 )
+print(kapetanios)
+
+#Como la prueba de dickey-fuller aumentada, KPSS y KSS muestran que la serie de tiempo es estacionaria, no tenemos que diferenciar. Ahora seleccionamos una configuración (p,d,q) para nuestro modelo arima.
+
+modelo_sarima <- auto.arima(serie_tiempo,seasonal = TRUE)
+
+plot(modelo_sarima)
+```
+
+```{r Pronóstico}
+# Calculamos las medidas de error del modelo
+residuos <- residuals(modelo_sarima)
+RMSE <- sqrt(mean(residuos^2))
+MAE <- mean(abs(residuos))
+MAPE <- mean(abs(residuos/serie_tiempo))*100
+MASE <- mean(abs(residuos))/mean(abs(diff(serie_tiempo)))
+
+# Imprimimos las medidas de error
+print(RMSE)
+print(MAE)
+print(MAPE)
+print(MASE)
+
+# Graficamos los datos del modelo en comparación con los datos reales
+ts.plot(serie_tiempo, modelo_sarima$fitted, 
+        gpars = list(col = c("black", "red"), 
+                      lty = c(1, 2), 
+                      main = "Datos reales vs Modelo",
+                      xlab = "Tiempo",
+                      ylab = "Millones de Usuarios"))
+legend("bottomright", # Posición de la leyenda
+       legend = c("Datos reales", "Pronóstico"), # Texto de la leyenda
+       col = c("black", "red"), # Colores
+       lty = c(1, 2)) # Tipo de línea
+
+
+# Pronosticamos los datos de los siguientes 3 periodos
+pronostico <- forecast(modelo_sarima, h=3)
+print(pronostico)
+plot(pronostico)
+```
+
